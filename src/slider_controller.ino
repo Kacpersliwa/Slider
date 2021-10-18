@@ -23,7 +23,7 @@ bool homeSwitchState = false;
 const byte ENC_SW = 14;
 const byte ENC_A = 2;
 const byte ENC_B = 3;
-uint8_t encPos = 0;
+int16_t encPos = 0;
 
 const byte STEPPER_DIR = 19;
 const byte STEPPER_STEP = 17;
@@ -42,51 +42,57 @@ Encoder enc(ENC_A, ENC_B);
 A4988 stepper(STEPPER_STEPS_PER_REV, STEPPER_DIR, STEPPER_STEP, STEPPER_EN);
 
 
-
 void setup() {
   Serial.begin(9600);
   Serial.println("START");
 
-  int ScreenBrightnes;
-  int ScreenContrast;
+  uint16_t ScreenBrightnes;
+  uint16_t ScreenContrast;
 
-  int MotorSpeed;
-  int MotorAccel;
+  uint16_t MotorSpeed;
+  uint16_t MotorAccel;
 
-  EEPROM.get(13, ScreenBrightnes);
-  EEPROM.get(14, ScreenContrast);
+  EEPROM.get(13*2, ScreenBrightnes);
+  EEPROM.get(14*2, ScreenContrast);
   
-  EEPROM.get(15, MotorSpeed);
-  EEPROM.get(16, MotorAccel);
+  EEPROM.get(15*2, MotorSpeed);
+  EEPROM.get(16*2, MotorAccel);
   
   pinMode(HOME_SWITCH, INPUT_PULLUP);
   pinMode(ENC_SW, INPUT_PULLUP);
 
   lcd.begin(16, 2);
-  ScreenBrightnes = 255;
-  ScreenContrast = 90;
+  lcd.setCursor(5,0);
+  lcd.print("Slider");
+  lcd.setCursor(2,1);
+  lcd.print("Version 1.0");
+
   
   pinMode(LCD_CONTRAST, OUTPUT);
   pinMode(LCD_BACKLIGHT, OUTPUT);
   analogWrite(LCD_CONTRAST, ScreenContrast);
   analogWrite(LCD_BACKLIGHT, ScreenBrightnes);
 
-  stepper.setSpeedProfile(BasicStepperDriver::Mode::LINEAR_SPEED);
+  stepper.begin(200, STEPPER_MICROSTEPS_PER_STEP);
   stepper.setEnableActiveState(LOW);
   stepper.enable();
-  stepper.begin(MotorSpeed,STEPPER_MICROSTEPS_PER_STEP);
+  stepper.setSpeedProfile(stepper.LINEAR_SPEED, 2000 ,2000);
+  Serial.println(stepper.getRPM());
+  Serial.println(stepper.getAcceleration());
+  stepper.startMove(-1000000);     // in microsteps
 }
 
 void loop() {
-  //static bool lastHomeSwitchState = false;
+  static bool lastHomeSwitchState = false;
   static bool lastEncSwitchState = false;
   static bool Cursor = true;
-  static uint8_t lastEncPos = 0;
+  static int16_t lastEncPos = 0;
   static uint8_t MenuItemsAmount = 0;
   static uint8_t MenuCursorLine = 0;
-  static uint8_t MenuType = 0;
+  static uint8_t MenuType = 255;
   static uint8_t MenuLine[6];
   const uint8_t MenuElements = 21;
+  static uint32_t HomeDistance;
 
   homeSwitchState = digitalRead(HOME_SWITCH);
   encPos = enc.read();
@@ -128,7 +134,7 @@ void loop() {
   Menu[4].Id = 4;
   Menu[4].Name = "Travel";
   Menu[4].Type = 1;
-  Menu[4].Multiplikation = 100;
+  Menu[4].Multiplikation = 1;
   Menu[4].Limit = Menu[19].Data;
 
   Menu[5].Id = 5;
@@ -173,9 +179,10 @@ void loop() {
   Menu[12].Action = 4;
 
   Menu[13].Id = 13;
-  Menu[13].Name = "Soft lim";
-  Menu[13].Type = 2;
-  Menu[13].Action = 5;
+  Menu[13].Name = "Pic time";
+  Menu[13].Type = 1;
+  Menu[13].Multiplikation = 100;
+  Menu[13].Limit = 10000;
 
   Menu[14].Id = 14;
   Menu[14].Name = "Brightnes";
@@ -210,13 +217,13 @@ void loop() {
   Menu[19].Id = 19;
   Menu[19].Name = "Travel lim";
   Menu[19].Type = 1;
-  Menu[19].Multiplikation = 100;
-  Menu[19].Limit = 40000;
+  Menu[19].Multiplikation = 1;
+  Menu[19].Limit = 200;
 
   Menu[20].Id = 20;
   Menu[20].Name = "EEPROM Reset";
   Menu[20].Type = 2;
-  Menu[20].Action = 6;
+  Menu[20].Action = 5;
 
   if(MenuType == 0)
   {
@@ -227,10 +234,12 @@ void loop() {
   }else if(MenuType == 1)
   {
      MenuLine[0] = Menu[0].Id;  //"Main menu"
-     MenuLine[1] = Menu[4].Id;  //"Pictures count"
-     MenuLine[2] = Menu[5].Id;  //"Travel distance"
-     MenuLine[3] = Menu[6].Id;  //"Start"
-     MenuItemsAmount = 4;   
+     MenuLine[1] = Menu[10].Id;  //"Pictures count"
+     MenuLine[2] = Menu[4].Id;  //"Travel distance"
+     MenuLine[3] = Menu[13].Id;
+     MenuLine[4] = Menu[5].Id;  //"Start"
+     MenuLine[5] = Menu[6].Id;
+     MenuItemsAmount = 6;   
   }else if(MenuType == 2)
   {
      MenuLine[0] = Menu[0].Id;  //"Main menu"
@@ -262,25 +271,32 @@ void loop() {
   {
      MenuLine[0] = Menu[3].Id;  //"Setings"
      MenuLine[1] = Menu[18].Id;  //"Steps/mm"
-     MenuLine[2] = Menu[13].Id;  //"Soft stop"
-     MenuLine[3] = Menu[19].Id;  //"Movement lim"
-     MenuItemsAmount = 4;
-  }
-  else if(MenuType == 255)
+     MenuLine[2] = Menu[19].Id;  //"Movement lim"
+     MenuItemsAmount = 3;
+  }else if(MenuType == 255)
   {
     int i;
     for(i = 0; i <= MenuElements-1; i++)
     {
       if(Menu[i].Type == 1)
       {
-        EEPROM.get(i, Menu[i].Data);
+        EEPROM.get(i*2, Menu[i].Data);
+        Serial.print("Czytam adres nr ");
+        Serial.print(i*2);
+        Serial.print(" Otrzymałem ");
+        Serial.println(Menu[i].Data);
       }
+      analogWrite(LCD_BACKLIGHT, Menu[14].Data);
+      analogWrite(LCD_CONTRAST, Menu[15].Data);
+      stepper.setRPM(Menu[16].Data/SCREW_PITCH_IN_MM);
+      stepper.setSpeedProfile(stepper.LINEAR_SPEED, Menu[17].Data, Menu[17].Data);
     }
     MenuType = 0;
   }
 
   if((digitalRead(ENC_SW) != lastEncSwitchState) & (digitalRead(ENC_SW) == false))
   {
+    lastEncSwitchState = digitalRead(ENC_SW);
     if(Menu[MenuLine[MenuCursorLine+Cursor]].Type == 0)
     {
       MenuType = Menu[MenuLine[MenuCursorLine+Cursor]].SubMenu;
@@ -290,90 +306,187 @@ void loop() {
     {
       while(true)
       {
-        lastEncSwitchState = digitalRead(ENC_SW);
         encPos = enc.read();
-        if((encPos/4) != lastEncPos)
+        if(encPos > lastEncPos+3 || encPos < lastEncPos-3)
         {
+          if((encPos < lastEncPos-3) & (Menu[MenuLine[MenuCursorLine+Cursor]].Data < Menu[MenuLine[MenuCursorLine+Cursor]].Limit))
+          {
+            Menu[MenuLine[MenuCursorLine+Cursor]].Data += Menu[MenuLine[MenuCursorLine+Cursor]].Multiplikation;
+
+          }else if((encPos > lastEncPos+3) & (Menu[MenuLine[MenuCursorLine+Cursor]].Data > Menu[MenuLine[MenuCursorLine+Cursor]].Multiplikation-1))
+          {
+            Menu[MenuLine[MenuCursorLine+Cursor]].Data -= Menu[MenuLine[MenuCursorLine+Cursor]].Multiplikation;
+          }
           lcd.setCursor(11 ,Cursor);
           lcd.print(Menu[MenuLine[MenuCursorLine+Cursor]].Data);
           lcd.print("    ");
-        if(((encPos/4) < lastEncPos) & (Menu[MenuLine[MenuCursorLine+Cursor]].Data < Menu[MenuLine[MenuCursorLine+Cursor]].Limit))
-          {
-            Menu[MenuLine[MenuCursorLine+Cursor]].Data += Menu[MenuLine[MenuCursorLine+Cursor]].Multiplikation;
-          }else if(((encPos/4) > lastEncPos) & (Menu[MenuLine[MenuCursorLine+Cursor]].Data > 0))
-          {
-            Menu[MenuLine[MenuCursorLine+Cursor]].Data -= Menu[MenuLine[MenuCursorLine+Cursor]].Multiplikation;
-            Serial.println("Hełoł");
-          }
           if(Menu[MenuLine[MenuCursorLine+Cursor]].Id == 14)
           {
             analogWrite(LCD_BACKLIGHT, Menu[14].Data);
           }else if(Menu[MenuLine[MenuCursorLine+Cursor]].Id == 15)
           {
             analogWrite(LCD_CONTRAST, Menu[15].Data);
+          }else if(Menu[MenuLine[MenuCursorLine+Cursor]].Id == 16)
+          {  
+            stepper.setRPM(Menu[16].Data/SCREW_PITCH_IN_MM);
           }else if(Menu[MenuLine[MenuCursorLine+Cursor]].Id == 17)
           {  
-           stepper.setSpeedProfile(BasicStepperDriver::Mode::LINEAR_SPEED, Menu[15].Data, Menu[15].Data);
+            stepper.setSpeedProfile(stepper.LINEAR_SPEED, Menu[17].Data, Menu[17].Data);
           }
+          lastEncPos = encPos;
         }
+        delay(10);
         if((digitalRead(ENC_SW) != lastEncSwitchState) & (digitalRead(ENC_SW) == false))
         {
-          EEPROM.put(Menu[MenuLine[MenuCursorLine+Cursor]].Id, Menu[MenuLine[MenuCursorLine+Cursor]].Data);
+          EEPROM.put(Menu[MenuLine[MenuCursorLine+Cursor]].Id*2, Menu[MenuLine[MenuCursorLine+Cursor]].Data);
+          Serial.println(Menu[MenuLine[MenuCursorLine+Cursor]].Data);
           break;
         }
-        lastEncPos = encPos/4;
         lastEncSwitchState = digitalRead(ENC_SW);
       }
     }else if(Menu[MenuLine[MenuCursorLine+Cursor]].Type == 2)
     {
       if(Menu[MenuLine[MenuCursorLine+Cursor]].Action == 1)
       {
-        
+        stepper.enable();
+        lcd.clear();
+        lcd.setCursor(0,0);
+        lcd.print("Working");
+        lcd.setCursor(0,1);
+        lcd.print("Photos left ");
+        int i;
+        unsigned long TimeForMove; 
+        for(i = 0; i < Menu[5].Data & HomeDistance/Menu[18].Data < Menu[19].Data; i++)
+        {
+          stepper.startMove(uint32_t(Menu[4].Data) * uint32_t(Menu[18].Data) / uint32_t(Menu[5].Data));
+          HomeDistance += uint32_t(Menu[4].Data) * uint32_t(Menu[18].Data) / uint32_t(Menu[5].Data);
+          TimeForMove = 5;
+          while (TimeForMove > 0)
+          {
+            TimeForMove = stepper.nextAction();
+            if((digitalRead(ENC_SW) != lastEncSwitchState) & (digitalRead(ENC_SW) == false)){
+            break;
+            }
+          }
+          lcd.setCursor(13,1);
+          lcd.print(Menu[5].Data - i);
+          lcd.print("    ");
+          if((digitalRead(ENC_SW) != lastEncSwitchState) & (digitalRead(ENC_SW) == false)){
+            break;
+          }
+          lastEncSwitchState = digitalRead(ENC_SW);
+          delay(Menu[13].Data);
+          // digitalWrite(AparatPin, 1);
+          // digitalWrite(AparatPin, 0);
+        }
+        stepper.stop();
+        stepper.disable();
       }else if(Menu[MenuLine[MenuCursorLine+Cursor]].Action == 2)
       {
-
+        stepper.enable();
+        stepper.startMove(-(uint32_t(Menu[18].Data) * uint32_t(Menu[19].Data)));
+        HomeDistance -= uint32_t(Menu[18].Data) * uint32_t(Menu[19].Data);
+        lcd.clear();
+        lcd.setCursor(5, 0);
+        lcd.print("Homing");
+        lcd.setCursor(0, 1);
+        lcd.print("Click to Stop");
+        while(homeSwitchState == true)
+        {
+          stepper.nextAction();
+          homeSwitchState = digitalRead(HOME_SWITCH);
+          if((digitalRead(ENC_SW) != lastEncSwitchState) & (digitalRead(ENC_SW) == false)){
+            break;
+          }
+        }
+        stepper.stop();
+        stepper.disable();
+        Serial.println(stepper.getCurrentState());
+        HomeDistance = 0;
       }else if(Menu[MenuLine[MenuCursorLine+Cursor]].Action == 3)
       {
+        lcd.clear();
+        lcd.setCursor(0,0);
+        lcd.print("Move");
+        lcd.setCursor(0,1);
+        lcd.print("Distance");
+        int travelTime = 2;
+        int8_t Move = 0;
+        stepper.enable();
+        while(true)
+        {
+          encPos = enc.read();
+          if(encPos > lastEncPos+3 || encPos < lastEncPos-3){
+            if(encPos > lastEncPos+3 & HomeDistance/Menu[18].Data < Menu[19].Data){
+              Move++;
+              stepper.move(Menu[18].Data);
+              HomeDistance += Menu[18].Data;
+            }else if(encPos < lastEncPos-3  & digitalRead(HOME_SWITCH) == true){
+              Move--;
+              stepper.move(-int16_t(Menu[18].Data));
+              HomeDistance -= Menu[18].Data;
+            }
+            lcd.setCursor(12,1);
+            lcd.print(Move);
+            lcd.print("   ");
+            lastEncPos = encPos;
+          }
+          if((digitalRead(ENC_SW) != lastEncSwitchState) & (digitalRead(ENC_SW) == false)){
+            break;
 
+          }
+          lastEncSwitchState = digitalRead(ENC_SW);
+        }  
+        stepper.disable();
       }else if(Menu[MenuLine[MenuCursorLine+Cursor]].Action == 4)
       {
-
+        // digitalWrite(AparatPin, 1);
+        // delay()
+        // digitalWrite(AparatPin, 0);
       }else if(Menu[MenuLine[MenuCursorLine+Cursor]].Action == 5)
       {
-
-      }else if(Menu[MenuLine[MenuCursorLine+Cursor]].Action == 6)
-      {
+        Menu[4].Data = 150;
+        Menu[5].Data = 0;
+        Menu[13].Data = 500;
         Menu[14].Data = 255;
         Menu[15].Data = 90;
         Menu[16].Data = 200;
         Menu[17].Data = 2000;
         Menu[18].Data = 4693.33;
-        Menu[19].Data = 30000;
+        Menu[19].Data = 160;
         int i;
         for(i = 0; i <= MenuElements-1; i++)
         {
+          uint16_t Odczytywacz;
           if(Menu[i].Type == 1)
           {
-            EEPROM.put(i, Menu[i].Data);
+            Serial.print("Wpisuję ");
+            Serial.print(Menu[i].Data);
+            Serial.print(" W adres ");
+            Serial.println(i*2);
+            EEPROM.put(i*2, Menu[i].Data);
+            EEPROM.get(i*2, Odczytywacz);
+            Serial.print("Otrzymałem ");
+            Serial.println(Odczytywacz);
           }
         }
+        MenuType = 255;
         Serial.println("EEPROM reseted");
       }
-      
     }
-    encPos -= 4;
+    encPos += 4;
   }
-  if(encPos/4 != lastEncPos)
+  if(encPos > lastEncPos+3 || encPos < lastEncPos-3)
   {
     lcd.clear();
-    if((encPos/4) > lastEncPos)
+    if(encPos > lastEncPos+3)
       {
         if((Cursor == true) & (MenuCursorLine < MenuItemsAmount-2))
         {
           MenuCursorLine += 1;
         }
         Cursor = true;
-      }else if((encPos/4) < lastEncPos)
+      }else if(encPos < lastEncPos-3)
       {
         if((Cursor == false) & (MenuCursorLine != 0))
         {
@@ -381,7 +494,6 @@ void loop() {
         }
         Cursor = false;
       }
-    Serial.println(MenuCursorLine);
     lcd.setCursor(0,0);
     
     if(Cursor == false)
@@ -389,7 +501,7 @@ void loop() {
     lcd.print(">");
     }
     lcd.print(Menu[MenuLine[MenuCursorLine]].Name);
-    if((Menu[MenuLine[MenuCursorLine]].Type == 1) || (Menu[MenuLine[MenuCursorLine]].Type == 2))
+    if((Menu[MenuLine[MenuCursorLine]].Type == 1))
     {
       lcd.setCursor(11,0);
       lcd.print(Menu[MenuLine[MenuCursorLine]].Data);
@@ -401,14 +513,14 @@ void loop() {
     lcd.print(">");
     }
     lcd.print(Menu[MenuLine[MenuCursorLine+1]].Name);
-    if((Menu[MenuLine[MenuCursorLine+1]].Type == 1) || (Menu[MenuLine[MenuCursorLine+1]].Type == 2))
+    if((Menu[MenuLine[MenuCursorLine+1]].Type == 1))
     {
       lcd.setCursor(11,1);
       lcd.print(Menu[MenuLine[MenuCursorLine+1]].Data);
     }
+    lastEncPos = encPos ;
   }
-    lastEncSwitchState = digitalRead(ENC_SW);
-    lastEncPos = encPos/4 ;
+  lastEncSwitchState = digitalRead(ENC_SW);
 }
   
   
