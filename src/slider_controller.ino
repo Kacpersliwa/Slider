@@ -20,6 +20,8 @@ const byte LCD_BACKLIGHT = 9;
 const byte HOME_SWITCH = 18;
 bool homeSwitchState = false;
 
+const byte AparatPin = 13;
+
 const byte ENC_SW = 14;
 const byte ENC_A = 2;
 const byte ENC_B = 3;
@@ -60,6 +62,9 @@ void setup() {
   
   pinMode(HOME_SWITCH, INPUT_PULLUP);
   pinMode(ENC_SW, INPUT_PULLUP);
+  pinMode(AparatPin, OUTPUT);
+
+  digitalWrite(AparatPin, HIGH);
 
   lcd.begin(16, 2);
   lcd.setCursor(5,0);
@@ -149,7 +154,7 @@ void loop() {
   Menu[6].Action = 1;
 
   Menu[7].Id = 7;
-  Menu[7].Name = "Kalibrate";
+  Menu[7].Name = "Calibrate";
   Menu[7].Type = 0;
   Menu[7].SubMenu = 6;
 
@@ -309,11 +314,11 @@ void loop() {
         encPos = enc.read();
         if(encPos > lastEncPos+3 || encPos < lastEncPos-3)
         {
-          if((encPos < lastEncPos-3) & (Menu[MenuLine[MenuCursorLine+Cursor]].Data < Menu[MenuLine[MenuCursorLine+Cursor]].Limit))
+          if((encPos > lastEncPos+3) & (Menu[MenuLine[MenuCursorLine+Cursor]].Data < Menu[MenuLine[MenuCursorLine+Cursor]].Limit))
           {
             Menu[MenuLine[MenuCursorLine+Cursor]].Data += Menu[MenuLine[MenuCursorLine+Cursor]].Multiplikation;
 
-          }else if((encPos > lastEncPos+3) & (Menu[MenuLine[MenuCursorLine+Cursor]].Data > Menu[MenuLine[MenuCursorLine+Cursor]].Multiplikation-1))
+          }else if((encPos < lastEncPos-3) & (Menu[MenuLine[MenuCursorLine+Cursor]].Data > Menu[MenuLine[MenuCursorLine+Cursor]].Multiplikation-1))
           {
             Menu[MenuLine[MenuCursorLine+Cursor]].Data -= Menu[MenuLine[MenuCursorLine+Cursor]].Multiplikation;
           }
@@ -376,8 +381,9 @@ void loop() {
           }
           lastEncSwitchState = digitalRead(ENC_SW);
           delay(Menu[13].Data);
-          // digitalWrite(AparatPin, 1);
-          // digitalWrite(AparatPin, 0);
+          digitalWrite(AparatPin, 0);
+          delay(20);
+          digitalWrite(AparatPin, 1);
         }
         stepper.stop();
         stepper.disable();
@@ -440,9 +446,9 @@ void loop() {
         stepper.disable();
       }else if(Menu[MenuLine[MenuCursorLine+Cursor]].Action == 4)
       {
-        // digitalWrite(AparatPin, 1);
-        // delay()
-        // digitalWrite(AparatPin, 0);
+        digitalWrite(AparatPin, 0);
+        delay(20);
+        digitalWrite(AparatPin, 1);
       }else if(Menu[MenuLine[MenuCursorLine+Cursor]].Action == 5)
       {
         Menu[4].Data = 150;
@@ -481,18 +487,18 @@ void loop() {
     lcd.clear();
     if(encPos > lastEncPos+3)
       {
-        if((Cursor == true) & (MenuCursorLine < MenuItemsAmount-2))
-        {
-          MenuCursorLine += 1;
-        }
-        Cursor = true;
-      }else if(encPos < lastEncPos-3)
-      {
         if((Cursor == false) & (MenuCursorLine != 0))
         {
           MenuCursorLine -= 1;
         }
         Cursor = false;
+      }else if(encPos < lastEncPos-3)
+      {
+        if((Cursor == true) & (MenuCursorLine < MenuItemsAmount-2))
+        {
+          MenuCursorLine += 1;
+        }
+        Cursor = true;
       }
     lcd.setCursor(0,0);
     
@@ -522,10 +528,3 @@ void loop() {
   }
   lastEncSwitchState = digitalRead(ENC_SW);
 }
-  
-  
-  // Periodic switching to the next screen.
-  // if (millis() - lastMs_nextScreen > period_nextScreen) {
-  //   lastMs_nextScreen = millis();
-  //   menu.next_screen();
-  // }
