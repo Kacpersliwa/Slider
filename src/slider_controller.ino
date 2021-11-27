@@ -4,6 +4,11 @@
 #include <LiquidCrystal.h>
 #include <EEPROM.h>
 
+const byte IRled = 13;                // IR Output Signal to Anode of IR LED 
+// Cathode of IR LED to ground through a 150 Ohm Resistor
+
+int start[]= {0,0,0,1,0,0,1,0,1,0,1,1,1,0,0,0,1,1,1,1};
+
 // Pin mapping for the display:
 const byte LCD_RS = 12;
 const byte LCD_E = 11;
@@ -19,8 +24,6 @@ const byte LCD_BACKLIGHT = 9;
 
 const byte HOME_SWITCH = 18;
 bool homeSwitchState = false;
-
-const byte AparatPin = 13;
 
 const byte ENC_SW = 14;
 const byte ENC_A = 2;
@@ -62,9 +65,7 @@ void setup() {
   
   pinMode(HOME_SWITCH, INPUT_PULLUP);
   pinMode(ENC_SW, INPUT_PULLUP);
-  pinMode(AparatPin, OUTPUT);
-
-  digitalWrite(AparatPin, HIGH);
+  pinMode(IRled, OUTPUT);
 
   lcd.begin(16, 2);
   lcd.setCursor(5,0);
@@ -95,8 +96,8 @@ void loop() {
   static uint8_t MenuItemsAmount = 0;
   static uint8_t MenuCursorLine = 0;
   static uint8_t MenuType = 255;
-  static uint8_t MenuLine[6];
-  const uint8_t MenuElements = 21;
+  static uint8_t MenuLine[7];
+  const uint8_t MenuElements = 23;
   static uint32_t HomeDistance;
 
   homeSwitchState = digitalRead(HOME_SWITCH);
@@ -137,7 +138,7 @@ void loop() {
   Menu[3].SubMenu = 2;
 
   Menu[4].Id = 4;
-  Menu[4].Name = "Travel";
+  Menu[4].Name = "Travel mm";
   Menu[4].Type = 1;
   Menu[4].Multiplikation = 1;
   Menu[4].Limit = Menu[19].Data;
@@ -145,7 +146,7 @@ void loop() {
   Menu[5].Id = 5;
   Menu[5].Name = "Pictures";
   Menu[5].Type = 1;
-  Menu[5].Multiplikation = 50;
+  Menu[5].Multiplikation = 10;
   Menu[5].Limit = 30000;
   
   Menu[6].Id = 6;
@@ -184,7 +185,7 @@ void loop() {
   Menu[12].Action = 4;
 
   Menu[13].Id = 13;
-  Menu[13].Name = "Pic time";
+  Menu[13].Name = "Bf move ms";
   Menu[13].Type = 1;
   Menu[13].Multiplikation = 100;
   Menu[13].Limit = 10000;
@@ -208,7 +209,7 @@ void loop() {
   Menu[16].Limit = 500;
 
   Menu[17].Id = 17;
-  Menu[17].Name = "Accel";
+  Menu[17].Name = "Accel mm/s";
   Menu[17].Type = 1;
   Menu[17].Multiplikation = 10;
   Menu[17].Limit = 10000;
@@ -230,6 +231,17 @@ void loop() {
   Menu[20].Type = 2;
   Menu[20].Action = 5;
 
+  Menu[21].Id = 21;
+  Menu[21].Name = "Af move ms";
+  Menu[21].Type = 1;
+  Menu[21].Multiplikation = 100;
+  Menu[21].Limit = 10000;
+
+  Menu[22].Id = 22;
+  Menu[22].Name = "Work setings";
+  Menu[22].Type = 0;
+  Menu[22].SubMenu = 7;
+
   if(MenuType == 0)
   {
      MenuLine[0] = Menu[1].Id;  //"Work"
@@ -239,12 +251,10 @@ void loop() {
   }else if(MenuType == 1)
   {
      MenuLine[0] = Menu[0].Id;  //"Main menu"
-     MenuLine[1] = Menu[10].Id;  //"Pictures count"
-     MenuLine[2] = Menu[4].Id;  //"Travel distance"
-     MenuLine[3] = Menu[13].Id;
-     MenuLine[4] = Menu[5].Id;  //"Start"
-     MenuLine[5] = Menu[6].Id;
-     MenuItemsAmount = 6;   
+     MenuLine[1] = Menu[10].Id;  //Home
+     MenuLine[2] = Menu[22].Id;  //Work Setings
+     MenuLine[3] = Menu[6].Id; //"Start"
+     MenuItemsAmount = 4;   
   }else if(MenuType == 2)
   {
      MenuLine[0] = Menu[0].Id;  //"Main menu"
@@ -278,17 +288,27 @@ void loop() {
      MenuLine[1] = Menu[18].Id;  //"Steps/mm"
      MenuLine[2] = Menu[19].Id;  //"Movement lim"
      MenuItemsAmount = 3;
+  }else if(MenuType == 7)
+  {
+     MenuLine[0] = Menu[1].Id;  //Work
+     MenuLine[1] = Menu[4].Id;  //"Travel distance"
+     MenuLine[2] = Menu[13].Id; //Time Befoure pic
+     MenuLine[3] = Menu[21].Id; //Time After pic
+     MenuLine[4] = Menu[5].Id;  //"Pictures count"
+     MenuItemsAmount = 5;   
   }else if(MenuType == 255)
   {
     int i;
-    for(i = 0; i <= MenuElements-1; i++)
+    for(i = 0; i <= MenuElements; i++)
     {
       if(Menu[i].Type == 1)
       {
         EEPROM.get(i*2, Menu[i].Data);
         Serial.print("Czytam adres nr ");
         Serial.print(i*2);
-        Serial.print(" Otrzymałem ");
+        Serial.print(" Otrzymałem \t");
+        Serial.print(Menu[i].Name);
+        Serial.print("\t");
         Serial.println(Menu[i].Data);
       }
       analogWrite(LCD_BACKLIGHT, Menu[14].Data);
@@ -322,9 +342,18 @@ void loop() {
           {
             Menu[MenuLine[MenuCursorLine+Cursor]].Data -= Menu[MenuLine[MenuCursorLine+Cursor]].Multiplikation;
           }
-          lcd.setCursor(11 ,Cursor);
+            uint8_t i;
+            for(i = 1; i < 10 ; i++)
+            {
+              float Number_lenght = Menu[MenuLine[MenuCursorLine+Cursor]].Data/pow(10,i);
+              if (Number_lenght < 1)
+              {
+                break;
+              }
+            }
+          lcd.setCursor(16-i-1 ,Cursor);
+          lcd.print(" ");
           lcd.print(Menu[MenuLine[MenuCursorLine+Cursor]].Data);
-          lcd.print("    ");
           if(Menu[MenuLine[MenuCursorLine+Cursor]].Id == 14)
           {
             analogWrite(LCD_BACKLIGHT, Menu[14].Data);
@@ -351,7 +380,7 @@ void loop() {
       }
     }else if(Menu[MenuLine[MenuCursorLine+Cursor]].Type == 2)
     {
-      if(Menu[MenuLine[MenuCursorLine+Cursor]].Action == 1)
+      if(Menu[MenuLine[MenuCursorLine+Cursor]].Action == 1) //Work Move
       {
         stepper.enable();
         lcd.clear();
@@ -370,7 +399,7 @@ void loop() {
           {
             TimeForMove = stepper.nextAction();
             if((digitalRead(ENC_SW) != lastEncSwitchState) & (digitalRead(ENC_SW) == false)){
-            break;
+              break;
             }
           }
           lcd.setCursor(13,1);
@@ -381,13 +410,12 @@ void loop() {
           }
           lastEncSwitchState = digitalRead(ENC_SW);
           delay(Menu[13].Data);
-          digitalWrite(AparatPin, 0);
-          delay(20);
-          digitalWrite(AparatPin, 1);
+          sendbutton(start);
+          delay(Menu[21].Data);
         }
         stepper.stop();
         stepper.disable();
-      }else if(Menu[MenuLine[MenuCursorLine+Cursor]].Action == 2)
+      }else if(Menu[MenuLine[MenuCursorLine+Cursor]].Action == 2) //Homing
       {
         stepper.enable();
         stepper.startMove(-(uint32_t(Menu[18].Data) * uint32_t(Menu[19].Data)));
@@ -409,7 +437,7 @@ void loop() {
         stepper.disable();
         Serial.println(stepper.getCurrentState());
         HomeDistance = 0;
-      }else if(Menu[MenuLine[MenuCursorLine+Cursor]].Action == 3)
+      }else if(Menu[MenuLine[MenuCursorLine+Cursor]].Action == 3) //Hand Jog move
       {
         lcd.clear();
         lcd.setCursor(0,0);
@@ -439,19 +467,16 @@ void loop() {
           }
           if((digitalRead(ENC_SW) != lastEncSwitchState) & (digitalRead(ENC_SW) == false)){
             break;
-
           }
           lastEncSwitchState = digitalRead(ENC_SW);
         }  
         stepper.disable();
-      }else if(Menu[MenuLine[MenuCursorLine+Cursor]].Action == 4)
+      }else if(Menu[MenuLine[MenuCursorLine+Cursor]].Action == 4) //Take a pic
       {
-        digitalWrite(AparatPin, 0);
-        delay(20);
-        digitalWrite(AparatPin, 1);
-      }else if(Menu[MenuLine[MenuCursorLine+Cursor]].Action == 5)
+        sendbutton(start);
+      }else if(Menu[MenuLine[MenuCursorLine+Cursor]].Action == 5) //EEPROM reset
       {
-        Menu[4].Data = 150;
+        Menu[4].Data = 125;
         Menu[5].Data = 0;
         Menu[13].Data = 500;
         Menu[14].Data = 255;
@@ -460,8 +485,9 @@ void loop() {
         Menu[17].Data = 2000;
         Menu[18].Data = 4693.33;
         Menu[19].Data = 160;
+        Menu[21].Data = 500;
         int i;
-        for(i = 0; i <= MenuElements-1; i++)
+        for(i = 0; i <= MenuElements; i++)
         {
           uint16_t Odczytywacz;
           if(Menu[i].Type == 1)
@@ -482,17 +508,17 @@ void loop() {
     }
     encPos += 4;
   }
-  if(encPos > lastEncPos+3 || encPos < lastEncPos-3)
+  if(encPos > lastEncPos+3 || encPos < lastEncPos-3)//Menu moves
   {
     lcd.clear();
-    if(encPos > lastEncPos+3)
+    if(encPos > lastEncPos+3)//Menu up chyba
       {
         if((Cursor == false) & (MenuCursorLine != 0))
         {
           MenuCursorLine -= 1;
         }
         Cursor = false;
-      }else if(encPos < lastEncPos-3)
+      }else if(encPos < lastEncPos-3)//Menu down chyba
       {
         if((Cursor == true) & (MenuCursorLine < MenuItemsAmount-2))
         {
@@ -507,9 +533,18 @@ void loop() {
     lcd.print(">");
     }
     lcd.print(Menu[MenuLine[MenuCursorLine]].Name);
-    if((Menu[MenuLine[MenuCursorLine]].Type == 1))
+    if((Menu[MenuLine[MenuCursorLine]].Type == 1))//Menu upper item
     {
-      lcd.setCursor(11,0);
+      uint8_t i;
+      for(i = 1; i < 10 ; i++)
+      {
+        float Number_lenght = (Menu[MenuLine[MenuCursorLine]].Data/pow(10,i));
+        if (Number_lenght < 1)
+        {
+          break;
+        }
+      }
+      lcd.setCursor(16-i,0);
       lcd.print(Menu[MenuLine[MenuCursorLine]].Data);
     }
     lcd.setCursor(0,1);
@@ -519,12 +554,99 @@ void loop() {
     lcd.print(">");
     }
     lcd.print(Menu[MenuLine[MenuCursorLine+1]].Name);
-    if((Menu[MenuLine[MenuCursorLine+1]].Type == 1))
+    if((Menu[MenuLine[MenuCursorLine+1]].Type == 1))//Menu lover item
     {
-      lcd.setCursor(11,1);
+      uint8_t i;
+      for(i = 1; i < 10 ; i++)
+      {
+        float Number_lenght = (Menu[MenuLine[MenuCursorLine+1]].Data/pow(10,i));
+        if (Number_lenght < 1)
+        {
+          break;
+        }
+      }
+      lcd.setCursor(16-i,1);
       lcd.print(Menu[MenuLine[MenuCursorLine+1]].Data);
     }
     lastEncPos = encPos ;
   }
   lastEncSwitchState = digitalRead(ENC_SW);
+}
+// Routine to send header data burst
+// This allows the IR reciever to set its AGC (Gain)
+// Header Burst Timing is 96 * 0.025uS = 2.4mS
+// Quiet Timing is 24 * 0.025uS = 600uS
+  
+// Routine to give the 40kHz burst signal
+void burst()                   // 40KHz burst
+{
+  digitalWrite(IRled, HIGH);   // sets the pin on
+  delayMicroseconds(10);       // pauses for 13 microseconds  (fudged to 10uS Delay)   
+  digitalWrite(IRled, LOW);    // sets the pin off
+  delayMicroseconds(8);        // pauses for 12 microseconds   (fudged to 8uS Delay)
+}
+// Routine to give a quiet period of data
+void quiet()                   // Quiet burst
+{
+  digitalWrite(IRled, LOW);    // sets the pin off
+  delayMicroseconds(10);       // pauses for 13 microseconds   (fudged to 10uS Delay)  
+  digitalWrite(IRled, LOW);    // sets the pin off
+  delayMicroseconds(8);        // pauses for 12 microseconds    (fudged to 8uS Delay)
+}
+
+
+void header() 
+{
+    for (int i=1; i <= 96; i++){
+      burst();                // 40kHz burst
+    }
+    for (int i=1; i <= 24; i++){
+      quiet();                // No 40 kHz
+    }
+}
+
+// Routine to send one data burst
+// Burst Timing is 48 * 0.025uS = 1.2mS
+// Quiet Timing is 24 * 0.025uS = 600uS
+void Data_is_One()
+{
+    for (int i=1; i <= 48; i++){
+      burst();                // 40kHz burst
+    }
+    for (int i=1; i <= 24; i++){
+      quiet();                // No 40 kHz
+    }
+}
+
+// Routine to send zero data burst
+// Burst Timing is 24 * 0.025uS = 600uS
+// Quiet Timing is 24 * 0.025uS = 600uS
+void Data_is_Zero()
+{
+    for (int i=1; i <= 24; i++){
+      burst();                // 40 kHz burst
+    }
+    for (int i=1; i <= 24; i++){
+      quiet();                // No 40 kHz 
+    }
+}
+
+void sendbutton(int CodeBits[])
+{
+  for (int i=1; i <= 3; i++)  // Send Command 3 times as per Sony Specs
+  {
+    header();                    // Send the Start header
+    for (int i=0; i <= 19; i++)  // Loop to send the bits
+    {
+          if(CodeBits[i] == 1)  // Is Data_is_One to be sent ?
+          {
+            Data_is_One();              // Yes, send a Data_is_One bit
+          }
+          else                  // No, Data_is_Zero to be sent
+          {
+            Data_is_Zero();              // Send a Data_is_Zero bit
+          }
+    }
+    delay(11);                  // Delay Padding to give approx 45mS between command starts
+  }
 }
