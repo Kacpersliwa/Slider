@@ -319,15 +319,15 @@ void loop() {
     MenuType = 0;
   }
 
-  if((digitalRead(ENC_SW) != lastEncSwitchState) & (digitalRead(ENC_SW) == false))
+  if((digitalRead(ENC_SW) != lastEncSwitchState) & (digitalRead(ENC_SW) == false))//After encoder click
   {
     lastEncSwitchState = digitalRead(ENC_SW);
-    if(Menu[MenuLine[MenuCursorLine+Cursor]].Type == 0)
+    if(Menu[MenuLine[MenuCursorLine+Cursor]].Type == 0)//Dobor menu
     {
       MenuType = Menu[MenuLine[MenuCursorLine+Cursor]].SubMenu;
       MenuCursorLine = 0;
     }
-    else if(Menu[MenuLine[MenuCursorLine+Cursor]].Type == 1)
+    else if(Menu[MenuLine[MenuCursorLine+Cursor]].Type == 1)//Zmiana wartości funkcji
     {
       while(true)
       {
@@ -378,7 +378,7 @@ void loop() {
         }
         lastEncSwitchState = digitalRead(ENC_SW);
       }
-    }else if(Menu[MenuLine[MenuCursorLine+Cursor]].Type == 2)
+    }else if(Menu[MenuLine[MenuCursorLine+Cursor]].Type == 2)//Dobor akcji
     {
       if(Menu[MenuLine[MenuCursorLine+Cursor]].Action == 1) //Work Move
       {
@@ -402,7 +402,16 @@ void loop() {
               break;
             }
           }
-          lcd.setCursor(13,1);
+          uint8_t j;
+          for(j = 1; j < 10 ; j++)
+          {
+            float Number_lenght = Menu[MenuLine[MenuCursorLine+Cursor]].Data/pow(10,i);
+            if (Number_lenght < 1)
+            {
+              break;
+            }
+          }
+          lcd.setCursor(16-i,1);
           lcd.print(Menu[5].Data - i);
           lcd.print("    ");
           if((digitalRead(ENC_SW) != lastEncSwitchState) & (digitalRead(ENC_SW) == false)){
